@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
 // Path to persist local bot database (mappings, logs, config)
 const DB_DIR = path.join(process.cwd(), "src", "data");
