@@ -1,6 +1,0 @@
-{
-  "name": "R1gi NGL Discord Bot",
-  "description": "A professional 24/7 Discord bot dashboard that anonymizes direct messages and forwards them to a dedicated #R1gi-NGL channel with secure ANON user tracking.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
