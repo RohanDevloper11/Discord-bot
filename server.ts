@@ -24,6 +24,7 @@ interface DbState {
   config: {
     token: string;
     channel: string;
+    botEnabled?: boolean;
   };
   guildChannels?: Record<string, string>;
   mappings: Array<{
@@ -48,6 +49,7 @@ const defaultDbState: DbState = {
   config: {
     token: process.env.DISCORD_TOKEN || "",
     channel: process.env.DISCORD_CHANNEL || "r1gi-ngl",
+    botEnabled: true,
   },
   guildChannels: {},
   mappings: [],
@@ -66,6 +68,7 @@ function loadDb() {
         config: {
           token: parsed.config?.token || process.env.DISCORD_TOKEN || "",
           channel: parsed.config?.channel || process.env.DISCORD_CHANNEL || "r1gi-ngl",
+          botEnabled: parsed.config?.botEnabled !== undefined ? parsed.config.botEnabled : true,
         },
         guildChannels: parsed.guildChannels || {},
         mappings: parsed.mappings || [],
@@ -113,6 +116,13 @@ async function initDiscordBot() {
       console.error("Error destroying existing bot client:", e);
     }
     discordClient = null;
+  }
+
+  if (db.config.botEnabled === false) {
+    botStatus = "disconnected";
+    lastError = "Bot connection is disabled on the dashboard.";
+    console.log("Discord Bot: Bot connection is disabled on the dashboard.");
+    return;
   }
 
   const token = db.config.token;
@@ -327,10 +337,31 @@ async function initDiscordBot() {
           const guildConfiguredChannel = db.guildChannels?.[targetGuild.id] || db.config.channel || "r1gi-ngl";
           let channelFound: TextChannel | null = null;
 
-          // Attempt to find channel by ID first
-          let ch = targetGuild.channels.cache.get(guildConfiguredChannel);
+          // Fetch all channels in the guild to ensure the cache is fully populated (highly recommended for serverless/ephemeral environments like Render)
+          try {
+            await targetGuild.channels.fetch();
+          } catch (fetchChannelsErr) {
+            console.warn(`Could not fetch all channels for guild ${targetGuild.name}:`, fetchChannelsErr);
+          }
+
+          // Attempt to find channel by ID or name
+          let ch = null;
+
+          // If the configured channel is a numeric ID, fetch it directly from the Discord API for maximum reliability
+          if (/^\d+$/.test(guildConfiguredChannel)) {
+            try {
+              ch = await targetGuild.channels.fetch(guildConfiguredChannel);
+            } catch (fetchErr) {
+              console.warn(`Could not fetch channel by ID ${guildConfiguredChannel} via API, trying cache lookup...`);
+            }
+          }
+
           if (!ch) {
-            // Otherwise search by name (case-insensitive)
+            ch = targetGuild.channels.cache.get(guildConfiguredChannel);
+          }
+
+          if (!ch) {
+            // Otherwise search cache by name (case-insensitive)
             ch = targetGuild.channels.cache.find(
               (c) =>
                 c.type === ChannelType.GuildText &&
@@ -388,8 +419,22 @@ async function initDiscordBot() {
             });
             saveDb();
 
+            // Find all text channels that the bot actually has access to see
+            const visibleTextChannels = targetGuild.channels.cache
+              .filter((c) => c.type === ChannelType.GuildText)
+              .map((c) => `• \`#${c.name}\` (ID: \`${c.id}\`)`)
+              .slice(0, 10);
+
+            let helpMsg = `⚠️ **Delivery Failed:** The bot is online, but the target channel \`#${guildConfiguredChannel}\` does not exist, or the bot lacks permissions to read/write in it inside server **${targetGuild.name}**.\n\n`;
+            if (visibleTextChannels.length > 0) {
+              helpMsg += `📋 **Channels the bot can currently see in "${targetGuild.name}":**\n${visibleTextChannels.join("\n")}\n\n`;
+              helpMsg += `💡 *To fix this, please make sure the bot has "View Channel" and "Send Messages" permissions in your preferred channel, or configure the bot to forward to one of the visible channels listed above.*`;
+            } else {
+              helpMsg += `💡 *Please make sure the bot has "View Channel" and "Send Messages" permissions for at least one text channel in your server.*`;
+            }
+
             await message.channel.send({
-              content: `⚠️ **Delivery Failed:** The bot is online, but the target channel \`#${guildConfiguredChannel}\` does not exist or the bot lacks permissions to write in server **${targetGuild.name}**. Please notify the server administrator!`,
+              content: helpMsg,
             });
           }
 
@@ -530,6 +575,15 @@ async function initDiscordBot() {
 // Start bot initially
 initDiscordBot();
 
+// Keep-Alive / Health Endpoints
+app.get("/ping", (req, res) => {
+  res.status(200).json({ status: "alive", timestamp: new Date().toISOString() });
+});
+
+app.get("/api/ping", (req, res) => {
+  res.status(200).json({ status: "alive", timestamp: new Date().toISOString() });
+});
+
 // API Endpoints for Dashboard
 
 // 1. Get complete dashboard status
@@ -569,6 +623,7 @@ app.get("/api/status", (req, res) => {
       token: maskedToken,
       hasRealToken: !!db.config.token && db.config.token !== "YOUR_DISCORD_BOT_TOKEN",
       channel: db.config.channel,
+      botEnabled: db.config.botEnabled !== false,
     },
     status: {
       status: botStatus,
@@ -586,7 +641,7 @@ app.get("/api/status", (req, res) => {
 
 // 2. Save dynamic bot configuration (updates token/channel and restarts the bot)
 app.post("/api/config", async (req, res) => {
-  const { token, channel } = req.body;
+  const { token, channel, botEnabled } = req.body;
 
   if (token !== undefined) {
     // If the token is masked, don't overwrite it with the masked version!
@@ -599,9 +654,14 @@ app.post("/api/config", async (req, res) => {
     db.config.channel = channel.trim() || "r1gi-ngl";
   }
 
+  if (botEnabled !== undefined) {
+    db.config.botEnabled = !!botEnabled;
+  }
+
   saveDb();
 
-  res.json({ success: true, message: "Configuration saved. Connecting bot..." });
+  const msg = db.config.botEnabled ? "Configuration saved. Connecting bot..." : "Configuration saved. Bot disconnected.";
+  res.json({ success: true, message: msg });
 
   // Fire-and-forget bot re-initialization
   initDiscordBot();
