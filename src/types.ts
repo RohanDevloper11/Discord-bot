@@ -1,6 +1,8 @@
 export interface BotConfig {
   token: string;
   channel: string;
+  botEnabled?: boolean;
+  isEnvConfigured?: boolean;
 }
 
 export interface BotStatus {

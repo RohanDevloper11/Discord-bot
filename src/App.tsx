@@ -32,6 +32,7 @@ export default function App() {
   const [tokenInput, setTokenInput] = useState<string>("");
   const [channelInput, setChannelInput] = useState<string>("");
   const [showToken, setShowToken] = useState<boolean>(false);
+  const [botEnabled, setBotEnabled] = useState<boolean>(true);
 
   // Simulator states
   const [simSender, setSimSender] = useState<string>("Rohan");
@@ -64,6 +65,7 @@ export default function App() {
       if (showLoading) {
         setTokenInput(resData.config.token);
         setChannelInput(resData.config.channel);
+        setBotEnabled(resData.config.botEnabled !== false);
       }
       setError(null);
     } catch (err: any) {
@@ -85,6 +87,24 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Toggle Bot Connection
+  const handleToggleBot = async () => {
+    const nextEnabled = !botEnabled;
+    setBotEnabled(nextEnabled);
+    try {
+      const response = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ botEnabled: nextEnabled }),
+      });
+      if (!response.ok) throw new Error("Failed to toggle bot connection");
+      await fetchStatus(false);
+    } catch (err: any) {
+      alert("Error toggling bot status: " + err.message);
+      setBotEnabled(!nextEnabled); // revert state
+    }
+  };
+
   // Update configuration
   const handleUpdateConfig = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,7 +113,7 @@ export default function App() {
       const response = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: tokenInput, channel: channelInput }),
+        body: JSON.stringify({ token: tokenInput, channel: channelInput, botEnabled }),
       });
       if (!response.ok) throw new Error("Failed to update config");
       
@@ -298,6 +318,36 @@ export default function App() {
           </div>
         )}
 
+        {/* Render Ephemeral Warning */}
+        {data && data.config.hasRealToken && !data.config.isEnvConfigured && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex gap-3">
+              <MailWarning className="w-6 h-6 text-amber-400 shrink-0" />
+              <div>
+                <h3 className="font-semibold text-[#E2E8F0]">⚠️ Hosting on Render? Avoid Connection Loss & Settings Reset!</h3>
+                <p className="text-xs text-[#94A3B8] mt-1 max-w-2xl">
+                  We detected your bot is configured via local state. Because Render uses an ephemeral (temporary) file system, **your bot credentials and target channels will be deleted every time Render restarts or goes to sleep.**
+                </p>
+                <p className="text-xs text-amber-300 mt-2 font-medium">
+                  💡 Fix this instantly: Configure <code className="text-white bg-[#0F172A] px-1.5 py-0.5 rounded border border-[#334155] font-mono">DISCORD_TOKEN</code> and <code className="text-white bg-[#0F172A] px-1.5 py-0.5 rounded border border-[#334155] font-mono">DISCORD_CHANNEL</code> in Render's Environment settings.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setActiveTab('guide');
+                setTimeout(() => {
+                  const el = document.getElementById('render-guide-section');
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold rounded-lg transition-all shadow-md shadow-amber-600/20 self-start md:self-center shrink-0 cursor-pointer"
+            >
+              How to fix on Render
+            </button>
+          </div>
+        )}
+
         {/* Dynamic Bot Error Logging if login failed */}
         {data && data.status.status === "error" && (
           <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 flex gap-3 text-rose-200">
@@ -361,6 +411,28 @@ export default function App() {
                     <h2 className="font-semibold text-sm text-[#F1F5F9]">Bot Credentials & Channel</h2>
                   </div>
                   <form onSubmit={handleUpdateConfig} className="p-5 space-y-4">
+                    
+                    {/* Live Connection Toggle */}
+                    <div className="bg-[#1E293B]/40 p-3 rounded-lg border border-[#334155]/40 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-semibold text-white">Live Bot Connection</p>
+                        <p className="text-[10px] text-[#94A3B8]">Enable or disable the Discord bot listener</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleBot}
+                        disabled={updating}
+                        className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                          botEnabled ? "bg-indigo-600" : "bg-[#334155]"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                            botEnabled ? "translate-x-5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                    </div>
                     
                     {/* Bot Token */}
                     <div className="space-y-1.5">
@@ -609,10 +681,39 @@ export default function App() {
                   </p>
 
                   <h3 className="font-bold text-[#E2E8F0] text-sm">Step 5: Create Forward Channel</h3>
-                  <p>
-                    Create a text channel on your server named exactly <code className="text-[#818CF8]">r1gi-ngl</code> (or configure a custom channel name/ID in our Settings panel). DM the bot, and it will immediately post in that channel!
-                  </p>
-                </div>
+                   <p>
+                     Create a text channel on your server named exactly <code className="text-[#818CF8]">r1gi-ngl</code> (or configure a custom channel name/ID in our Settings panel). DM the bot, and it will immediately post in that channel!
+                   </p>
+
+                   <div id="render-guide-section" className="mt-6 pt-5 border-t border-[#1E293B] space-y-3 bg-amber-500/5 p-4 rounded-xl border border-amber-500/10">
+                     <h3 className="font-bold text-amber-400 text-sm flex items-center gap-1.5">
+                       <MailWarning className="w-4 h-4" />
+                       Step 6: Hosting on Render (Keep Bot 100% Online)
+                     </h3>
+                     <p className="text-amber-200/80">
+                       Render's free tier has an **ephemeral disk**. When your app goes to sleep or restarts (which happens automatically at least once a day or after 15 minutes of inactivity), **any configurations saved in the dashboard (like your bot token, channels, or mappings) will be wiped out.**
+                     </p>
+                     <p className="text-[#94A3B8]">
+                       To make your bot 100% persistent and ensure it never loses connection or forgets settings, configure them as **Environment Variables** in Render:
+                     </p>
+                     <ol className="list-decimal pl-5 space-y-1 mt-1 text-[#E2E8F0]">
+                       <li>Log into your <a href="https://dashboard.render.com" target="_blank" rel="noreferrer" className="text-indigo-400 hover:underline inline-flex items-center gap-0.5">Render Dashboard <ExternalLink className="w-3 h-3" /></a> and select your Web Service.</li>
+                       <li>Navigate to the <strong>Environment</strong> tab on the left-side menu.</li>
+                       <li>Click <strong>Add Environment Variable</strong> and define:
+                         <div className="mt-1.5 space-y-1 font-mono text-[11px] bg-[#0B0F19] p-2.5 rounded border border-[#1E293B]">
+                           <div>• Key: <code className="text-emerald-400 font-bold">DISCORD_TOKEN</code></div>
+                           <div className="pl-3 text-[#64748B]">Value: <span className="text-white">(Your actual Discord Bot Token)</span></div>
+                           <div className="mt-1">• Key: <code className="text-emerald-400 font-bold">DISCORD_CHANNEL</code></div>
+                           <div className="pl-3 text-[#64748B]">Value: <span className="text-white">(Your target channel ID, e.g. <code className="text-indigo-300">1515399013522735316</code> or channel name)</span></div>
+                         </div>
+                       </li>
+                       <li>Click <strong>Save Changes</strong> at the bottom.</li>
+                     </ol>
+                     <p className="text-[11px] text-[#64748B] italic">
+                       Once saved, Render will redeploy your service. Your bot will automatically start up connected, remember your chosen channel, and will never lose connection when sleeping!
+                     </p>
+                   </div>
+                 </div>
               </div>
             )}
 
