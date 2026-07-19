@@ -70,11 +70,19 @@ function loadDb() {
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       const parsed = JSON.parse(data);
+      
+      const loadedToken = (parsed.config?.token && parsed.config.token !== "YOUR_DISCORD_BOT_TOKEN") ? parsed.config.token : "";
+      const finalToken = hasEnvToken ? envToken.trim() : loadedToken;
+      const finalChannel = hasEnvChannel ? envChannel.trim() : (parsed.config?.channel || "r1gi-ngl");
+      
+      // If there is an environment token, force botEnabled to true so it connects out of the box in cloud deployments
+      const finalBotEnabled = hasEnvToken ? true : (parsed.config?.botEnabled !== undefined ? parsed.config.botEnabled : true);
+
       db = {
         config: {
-          token: (parsed.config?.token && parsed.config.token !== "YOUR_DISCORD_BOT_TOKEN") ? parsed.config.token : (hasEnvToken ? envToken.trim() : ""),
-          channel: parsed.config?.channel ? parsed.config.channel : (hasEnvChannel ? envChannel.trim() : "r1gi-ngl"),
-          botEnabled: parsed.config?.botEnabled !== undefined ? parsed.config.botEnabled : true,
+          token: finalToken,
+          channel: finalChannel,
+          botEnabled: finalBotEnabled,
         },
         guildChannels: parsed.guildChannels || {},
         mappings: parsed.mappings || [],
