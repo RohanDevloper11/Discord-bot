@@ -61,18 +61,35 @@ let db: DbState = { ...defaultDbState };
 // Load database from file if exists
 function loadDb() {
   try {
+    const envToken = process.env.DISCORD_TOKEN;
+    const hasEnvToken = envToken && envToken !== "YOUR_DISCORD_BOT_TOKEN" && envToken.trim() !== "";
+    
+    const envChannel = process.env.DISCORD_CHANNEL;
+    const hasEnvChannel = envChannel && envChannel !== "r1gi-ngl" && envChannel.trim() !== "";
+
     if (fs.existsSync(DB_FILE)) {
       const data = fs.readFileSync(DB_FILE, "utf-8");
       const parsed = JSON.parse(data);
       db = {
         config: {
-          token: parsed.config?.token || process.env.DISCORD_TOKEN || "",
-          channel: parsed.config?.channel || process.env.DISCORD_CHANNEL || "r1gi-ngl",
+          token: hasEnvToken ? envToken.trim() : (parsed.config?.token || ""),
+          channel: hasEnvChannel ? envChannel.trim() : (parsed.config?.channel || "r1gi-ngl"),
           botEnabled: parsed.config?.botEnabled !== undefined ? parsed.config.botEnabled : true,
         },
         guildChannels: parsed.guildChannels || {},
         mappings: parsed.mappings || [],
         messages: parsed.messages || [],
+      };
+    } else {
+      db = {
+        config: {
+          token: hasEnvToken ? envToken.trim() : "",
+          channel: hasEnvChannel ? envChannel.trim() : "r1gi-ngl",
+          botEnabled: true,
+        },
+        guildChannels: {},
+        mappings: [],
+        messages: [],
       };
     }
   } catch (err) {
@@ -618,12 +635,16 @@ app.get("/api/status", (req, res) => {
     ? db.config.token.substring(0, 10) + "..." + db.config.token.substring(Math.max(0, db.config.token.length - 6))
     : "";
 
+  const envToken = process.env.DISCORD_TOKEN;
+  const isEnvConfigured = !!(envToken && envToken !== "YOUR_DISCORD_BOT_TOKEN" && envToken.trim() !== "");
+
   res.json({
     config: {
       token: maskedToken,
       hasRealToken: !!db.config.token && db.config.token !== "YOUR_DISCORD_BOT_TOKEN",
       channel: db.config.channel,
       botEnabled: db.config.botEnabled !== false,
+      isEnvConfigured,
     },
     status: {
       status: botStatus,
