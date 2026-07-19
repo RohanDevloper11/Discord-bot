@@ -72,8 +72,8 @@ function loadDb() {
       const parsed = JSON.parse(data);
       db = {
         config: {
-          token: hasEnvToken ? envToken.trim() : (parsed.config?.token || ""),
-          channel: hasEnvChannel ? envChannel.trim() : (parsed.config?.channel || "r1gi-ngl"),
+          token: (parsed.config?.token && parsed.config.token !== "YOUR_DISCORD_BOT_TOKEN") ? parsed.config.token : (hasEnvToken ? envToken.trim() : ""),
+          channel: parsed.config?.channel ? parsed.config.channel : (hasEnvChannel ? envChannel.trim() : "r1gi-ngl"),
           botEnabled: parsed.config?.botEnabled !== undefined ? parsed.config.botEnabled : true,
         },
         guildChannels: parsed.guildChannels || {},
