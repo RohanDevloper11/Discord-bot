@@ -647,16 +647,20 @@ app.get("/api/status", (req, res) => {
       isEnvConfigured,
     },
     status: {
-      status: botStatus,
+      status: (discordClient && discordClient.isReady()) ? "connected" : botStatus,
       errorMsg: lastError,
       tag: discordClient?.user?.tag || null,
       id: discordClient?.user?.id || null,
       guildsCount: discordClient?.guilds.cache.size || 0,
       latency: discordClient?.ws.ping || 0,
       activeChannel: activeChannelInfo,
+      guilds: discordClient
+        ? discordClient.guilds.cache.map((g) => ({ id: g.id, name: g.name }))
+        : [],
     },
     mappings: db.mappings,
     messages: db.messages,
+    guildChannels: db.guildChannels || {},
   });
 });
 
@@ -672,7 +676,13 @@ app.post("/api/config", async (req, res) => {
   }
   
   if (channel !== undefined) {
-    db.config.channel = channel.trim() || "r1gi-ngl";
+    const trimmedChannel = channel.trim() || "r1gi-ngl";
+    if (db.config.channel !== trimmedChannel) {
+      db.config.channel = trimmedChannel;
+      // Clear server-specific channel overrides to let the new global channel take effect immediately
+      db.guildChannels = {};
+      console.log(`Discord Bot: Configured channel changed. Cleared all server-specific channel overrides.`);
+    }
   }
 
   if (botEnabled !== undefined) {
@@ -686,6 +696,24 @@ app.post("/api/config", async (req, res) => {
 
   // Fire-and-forget bot re-initialization
   initDiscordBot();
+});
+
+// 2b. Delete a specific guild channel override
+app.post("/api/guild-channel/delete", (req, res) => {
+  const { guildId } = req.body;
+  if (guildId && db.guildChannels) {
+    delete db.guildChannels[guildId];
+    saveDb();
+    return res.json({ success: true, message: "Server-specific channel override cleared!" });
+  }
+  res.status(400).json({ success: false, error: "Missing guildId or no guild channels found" });
+});
+
+// 2c. Clear all guild channel overrides
+app.post("/api/guild-channels/clear", (req, res) => {
+  db.guildChannels = {};
+  saveDb();
+  res.json({ success: true, message: "All server-specific channel overrides cleared!" });
 });
 
 // 3. Reset anonymous user mappings

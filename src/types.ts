@@ -13,6 +13,7 @@ export interface BotStatus {
   guildsCount: number;
   latency: number;
   activeChannel: { id: string; name: string } | null;
+  guilds?: { id: string; name: string }[];
 }
 
 export interface AnonMapping {
@@ -37,4 +38,5 @@ export interface DashboardData {
   status: BotStatus;
   mappings: AnonMapping[];
   messages: ForwardedMessage[];
+  guildChannels?: Record<string, string>;
 }

@@ -18,7 +18,8 @@ import {
   Sliders,
   ChevronRight,
   UserCheck,
-  MailWarning
+  MailWarning,
+  Hash
 } from "lucide-react";
 import { DashboardData, ForwardedMessage, AnonMapping } from "./types";
 
@@ -138,6 +139,39 @@ export default function App() {
       alert("All anonymous user mappings have been reset!");
     } catch (err: any) {
       alert("Error resetting mappings: " + err.message);
+    }
+  };
+
+  // Delete a specific guild channel override
+  const handleDeleteGuildOverride = async (guildId: string) => {
+    if (!window.confirm("Are you sure you want to clear the channel override for this server? This will restore the global Dedicated Forwarding Channel for this server.")) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/guild-channel/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guildId }),
+      });
+      if (!response.ok) throw new Error("Failed to clear override");
+      await fetchStatus();
+    } catch (err: any) {
+      alert("Error clearing override: " + err.message);
+    }
+  };
+
+  // Clear all guild channel overrides
+  const handleClearAllGuildOverrides = async () => {
+    if (!window.confirm("Are you sure you want to clear ALL server-specific channel overrides? This will force all servers to use your global Dedicated Forwarding Channel.")) {
+      return;
+    }
+    try {
+      const response = await fetch("/api/guild-channels/clear", { method: "POST" });
+      if (!response.ok) throw new Error("Failed to clear overrides");
+      await fetchStatus();
+      alert("All server-specific overrides have been cleared!");
+    } catch (err: any) {
+      alert("Error clearing overrides: " + err.message);
     }
   };
 
@@ -575,62 +609,128 @@ export default function App() {
               </>
             )}
 
-            {/* TAB: mappings (Active User ANON Maps) */}
+            {/* TAB: mappings (Active User ANON Maps & Server Overrides) */}
             {activeTab === 'mappings' && (
-              <div className="bg-[#0B0F19] rounded-xl border border-[#1E293B] overflow-hidden shadow-xl">
-                <div className="px-5 py-4 border-b border-[#1E293B] flex items-center justify-between bg-[#0E1524]">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4 text-indigo-400" />
-                    <h2 className="font-semibold text-sm text-[#F1F5F9]">Active User Mappings</h2>
+              <div className="space-y-6">
+                {/* Active User Mappings Card */}
+                <div className="bg-[#0B0F19] rounded-xl border border-[#1E293B] overflow-hidden shadow-xl">
+                  <div className="px-5 py-4 border-b border-[#1E293B] flex items-center justify-between bg-[#0E1524]">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-[#818CF8]" />
+                      <h2 className="font-semibold text-sm text-[#F1F5F9]">Active User Mappings</h2>
+                    </div>
+                    <button
+                      onClick={handleResetMappings}
+                      className="p-1.5 bg-[#1E293B] hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 rounded-lg border border-[#334155] hover:border-rose-500/30 transition-all text-[11px] flex items-center gap-1 cursor-pointer"
+                      title="Reset all mappings"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Reset
+                    </button>
                   </div>
-                  <button
-                    onClick={handleResetMappings}
-                    className="p-1.5 bg-[#1E293B] hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 rounded-lg border border-[#334155] hover:border-rose-500/30 transition-all text-[11px] flex items-center gap-1 cursor-pointer"
-                    title="Reset all mappings"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    Reset
-                  </button>
-                </div>
-                
-                <div className="p-4 space-y-4">
-                  <p className="text-[11px] text-[#94A3B8] leading-relaxed">
-                    Mappings are dynamically assigned and cached. Each Discord User is mapped to a secure, permanent sequence code (<code className="text-white">ANONxxxx</code>) to protect their identity on the target server.
-                  </p>
+                  
+                  <div className="p-4 space-y-4">
+                    <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+                      Mappings are dynamically assigned and cached. Each Discord User is mapped to a secure, permanent sequence code (<code className="text-white">ANONxxxx</code>) to protect their identity on the target server.
+                    </p>
 
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                    {data && data.mappings.length > 0 ? (
-                      data.mappings.map((map) => (
-                        <div
-                          key={map.userId}
-                          className="bg-[#1E293B]/60 hover:bg-[#1E293B] rounded-lg p-3 border border-[#334155] flex items-center justify-between transition-all"
-                        >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-bold bg-indigo-500/15 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
-                                {map.anonId}
-                              </span>
-                              <span className="text-xs font-semibold text-white truncate max-w-[120px]">
-                                {map.userTag}
-                              </span>
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                      {data && data.mappings.length > 0 ? (
+                        data.mappings.map((map) => (
+                          <div
+                            key={map.userId}
+                            className="bg-[#1E293B]/60 hover:bg-[#1E293B] rounded-lg p-3 border border-[#334155] flex items-center justify-between transition-all"
+                          >
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold bg-indigo-500/15 text-indigo-400 px-2 py-0.5 rounded border border-indigo-500/20 font-mono">
+                                  {map.anonId}
+                                </span>
+                                <span className="text-xs font-semibold text-white truncate max-w-[120px]">
+                                  {map.userTag}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[#64748B] mt-1">
+                                ID: {map.userId.startsWith("sim_") ? "Simulated User" : map.userId}
+                              </p>
                             </div>
-                            <p className="text-[10px] text-[#64748B] mt-1">
-                              ID: {map.userId.startsWith("sim_") ? "Simulated User" : map.userId}
-                            </p>
-                          </div>
 
-                          <div className="text-right">
-                            <span className="text-[9px] font-bold uppercase text-indigo-400 block">Active Mapping</span>
-                            <span className="text-[10px] text-[#64748B] block mt-0.5">Last msg: {formatDate(map.lastActive)}</span>
+                            <div className="text-right">
+                              <span className="text-[9px] font-bold uppercase text-[#818CF8] block">Active Mapping</span>
+                              <span className="text-[10px] text-[#64748B] block mt-0.5">Last msg: {formatDate(map.lastActive)}</span>
+                            </div>
                           </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-6 text-[#64748B] text-xs">
+                          <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          No active anonymous user mappings. Send a direct message or simulate one!
                         </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-[#64748B] text-xs">
-                        <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        No active anonymous user mappings. Send a direct message or simulate one!
-                      </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Server-Specific Channel Overrides Card */}
+                <div className="bg-[#0B0F19] rounded-xl border border-[#1E293B] overflow-hidden shadow-xl">
+                  <div className="px-5 py-4 border-b border-[#1E293B] flex items-center justify-between bg-[#0E1524]">
+                    <div className="flex items-center gap-2">
+                      <Hash className="w-4 h-4 text-amber-400" />
+                      <h2 className="font-semibold text-sm text-[#F1F5F9]">Server-Specific Channel Overrides</h2>
+                    </div>
+                    {data && data.guildChannels && Object.keys(data.guildChannels).length > 0 && (
+                      <button
+                        onClick={handleClearAllGuildOverrides}
+                        className="p-1.5 bg-[#1E293B] hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 rounded-lg border border-[#334155] hover:border-rose-500/30 transition-all text-[11px] flex items-center gap-1 cursor-pointer"
+                        title="Clear all server overrides"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Clear All
+                      </button>
                     )}
+                  </div>
+
+                  <div className="p-4 space-y-4">
+                    <p className="text-[11px] text-[#94A3B8] leading-relaxed">
+                      If an administrator used the <code className="text-[#818CF8]">/select</code> command inside a server channel, that channel became the dedicated channel for that server. Server-specific overrides **take precedence** over the global dashboard settings.
+                    </p>
+
+                    <div className="space-y-2 max-h-[250px] overflow-y-auto pr-1">
+                      {data && data.guildChannels && Object.keys(data.guildChannels).length > 0 ? (
+                        Object.entries(data.guildChannels).map(([guildId, chVal]) => {
+                          const guildName = data.status?.guilds?.find((g) => g.id === guildId)?.name || `Server (ID: ${guildId})`;
+                          return (
+                            <div
+                              key={guildId}
+                              className="bg-[#1E293B]/60 hover:bg-[#1E293B] rounded-lg p-3 border border-[#334155] flex items-center justify-between transition-all"
+                            >
+                              <div>
+                                <h3 className="text-xs font-semibold text-white">{guildName}</h3>
+                                <div className="flex items-center gap-1.5 mt-1">
+                                  <span className="text-[10px] text-[#64748B]">Target Channel:</span>
+                                  <span className="text-xs font-mono font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                    #{chVal}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => handleDeleteGuildOverride(guildId)}
+                                className="p-1.5 bg-[#1E293B] hover:bg-rose-500/20 text-[#94A3B8] hover:text-rose-400 rounded-lg border border-[#334155] hover:border-rose-500/30 transition-all cursor-pointer"
+                                title="Clear override and restore global default"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="text-center py-8 text-[#64748B] text-xs">
+                          <Hash className="w-8 h-8 mx-auto mb-2 opacity-30 text-amber-500" />
+                          No server-specific channel overrides are configured. All servers will use the global Dedicated Forwarding Channel: <code className="text-white bg-[#1E293B] px-1.5 py-0.5 rounded border border-[#334155] font-mono">{channelInput || "r1gi-ngl"}</code>.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
